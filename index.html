@@ -1,0 +1,420 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Inventory">
+<title>Home Inventory</title>
+<style>
+:root{--bg:#f6f5f2;--card:#fff;--ink:#1d1d1f;--muted:#6e6e73;--line:#e3e1dc;--accent:#2f6f5e;--accent-ink:#fff;--warn:#b86e00;--danger:#b3261e}
+@media (prefers-color-scheme:dark){:root{--bg:#141414;--card:#1f1f1f;--ink:#f2f2f2;--muted:#a1a1a6;--line:#343434;--accent:#5fb39b;--accent-ink:#0b1f19;--warn:#ffb340;--danger:#ff6b60}}
+*{box-sizing:border-box}
+body{margin:0;font:16px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--ink);padding-bottom:110px}
+header{position:sticky;top:0;z-index:5;background:var(--bg);padding:calc(env(safe-area-inset-top) + 10px) 16px 10px;border-bottom:1px solid var(--line)}
+.top{display:flex;align-items:center;gap:8px}
+h1{font-size:20px;margin:0;flex:1}
+.status{font-size:12px;color:var(--muted);margin-top:2px}
+.status.dirty{color:var(--warn)}
+button{font:inherit;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:10px;padding:8px 12px;cursor:pointer}
+button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600}
+button.danger{color:var(--danger)}
+input,select,textarea{font:inherit;width:100%;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--card);color:var(--ink)}
+textarea{resize:vertical}
+label{display:block;font-size:13px;color:var(--muted);margin:12px 0 4px}
+.hint{font-weight:400;opacity:.8}
+.searchrow{display:flex;gap:8px;margin-top:10px}
+.filters{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+.filters .fit{grid-column:1/-1;display:grid;grid-template-columns:auto 1fr 1fr 1fr;gap:6px;align-items:center;font-size:13px;color:var(--muted)}
+.summary{font-size:13px;color:var(--muted);padding:10px 16px 0}
+main{padding:10px 16px;display:grid;gap:10px}
+.card{display:flex;gap:12px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:10px;cursor:pointer;align-items:center}
+.thumb{width:72px;height:72px;border-radius:10px;object-fit:cover;background:var(--line);flex:none;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:12px}
+.card h3{margin:0 0 2px;font-size:16px}
+.card .dims{font-size:14px}
+.card .meta{font-size:13px;color:var(--muted)}
+.empty{text-align:center;color:var(--muted);padding:40px 10px}
+.fab{position:fixed;right:16px;bottom:calc(env(safe-area-inset-bottom) + 16px);padding:14px 20px;border-radius:30px;box-shadow:0 4px 14px rgba(0,0,0,.25);font-size:17px}
+.menu{position:absolute;right:16px;top:calc(env(safe-area-inset-top) + 52px);background:var(--card);border:1px solid var(--line);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.2);display:flex;flex-direction:column;min-width:230px;overflow:hidden;z-index:20}
+.menu button{border:0;border-radius:0;text-align:left;padding:12px 14px;border-bottom:1px solid var(--line)}
+.menu button:last-child{border-bottom:0}
+.sheet{position:fixed;inset:0;background:var(--bg);z-index:30;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.sheet-head{position:sticky;top:0;background:var(--bg);display:flex;align-items:center;justify-content:space-between;padding:calc(env(safe-area-inset-top) + 10px) 16px 10px;border-bottom:1px solid var(--line);z-index:2}
+.sheet-body{padding:8px 16px 60px;max-width:640px;margin:0 auto}
+.photos{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:8px;margin-top:10px}
+.ph{position:relative}
+.ph img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:10px;display:block}
+.ph button{position:absolute;top:4px;right:4px;padding:2px 8px;border-radius:20px;background:rgba(0,0,0,.6);color:#fff;border:0}
+.row{display:flex;gap:8px;margin-top:10px}
+.row>*{flex:1}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 10px}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:0 8px}
+.parsed{font-size:12px;color:var(--accent);min-height:16px;margin-top:4px}
+#viewer{position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:40;display:flex;align-items:center;justify-content:center}
+#viewer img{max-width:100%;max-height:100%}
+#report{display:none}
+@media print{
+  header,main,.fab,.sheet,.menu,.summary,#viewer{display:none!important}
+  body{background:#fff;color:#000;padding:0}
+  #report{display:block;font-size:11px}
+  #report h2{margin:0 0 4px}
+  #report table{width:100%;border-collapse:collapse}
+  #report th,#report td{border-bottom:1px solid #ccc;padding:6px 4px;vertical-align:top;text-align:left}
+  #report tr{page-break-inside:avoid}
+  #report img{width:90px;height:90px;object-fit:cover}
+  #report .room{background:#eee;font-weight:600}
+}
+</style>
+</head>
+<body>
+<header>
+  <div class="top">
+    <h1>Home Inventory</h1>
+    <button id="save-btn" class="primary" hidden>Save</button>
+    <button id="menu-btn" aria-label="Menu">File</button>
+  </div>
+  <div id="status" class="status"></div>
+  <div class="searchrow">
+    <input id="q" type="search" placeholder="Search items, rooms, notes…">
+    <button id="filter-btn">Filter</button>
+  </div>
+  <div id="filters" class="filters" hidden>
+    <select id="f-room"><option value="">All rooms</option></select>
+    <select id="f-cat"><option value="">All categories</option></select>
+    <div class="fit">Fits in (in): <input id="fit-w" inputmode="decimal" placeholder="W"><input id="fit-d" inputmode="decimal" placeholder="D"><input id="fit-h" inputmode="decimal" placeholder="H"></div>
+  </div>
+</header>
+<div id="menu" class="menu" hidden>
+  <button data-act="open">Open data file…</button>
+  <button data-act="save">Save data file</button>
+  <button data-act="saveas">Save as new file…</button>
+  <button data-act="csv">Export spreadsheet (CSV)</button>
+  <button data-act="print">Print / PDF report</button>
+  <button data-act="clear" class="danger">Start a new inventory</button>
+</div>
+<div id="summary" class="summary"></div>
+<main id="list"></main>
+<button class="fab primary" id="add-btn">+ Add item</button>
+<input type="file" id="open-input" hidden>
+
+<div id="sheet" class="sheet" hidden>
+  <div class="sheet-head">
+    <button id="cancel-btn">Cancel</button>
+    <strong id="sheet-title">New item</strong>
+    <button id="done-btn" class="primary">Done</button>
+  </div>
+  <div class="sheet-body">
+    <div id="photos" class="photos"></div>
+    <div class="row">
+      <button id="cam-btn">Take photo</button>
+      <button id="lib-btn">From library</button>
+    </div>
+    <input type="file" id="cam" accept="image/*" capture="environment" hidden>
+    <input type="file" id="lib" accept="image/*" multiple hidden>
+
+    <label for="f-dictation">Describe it <span class="hint">— tap the mic on your keyboard and talk</span></label>
+    <textarea id="f-dictation" rows="4" placeholder="Walnut dresser, room primary bedroom, category furniture, 60 wide by 20 deep by 34 high, 120 pounds, worth 800, brand Room and Board, notes small scratch on top"></textarea>
+    <button id="mic-btn" hidden style="margin-top:6px">Start dictation</button>
+    <div id="parsed" class="parsed"></div>
+
+    <label for="f-name">Item</label>
+    <input id="f-name">
+    <div class="grid2">
+      <div><label for="f-room">Room</label><input id="f-room2" list="dl-rooms"></div>
+      <div><label for="f-category">Category</label><input id="f-category" list="dl-cats"></div>
+    </div>
+    <label>Size (inches) — width × depth × height</label>
+    <div class="grid3">
+      <input id="f-w" inputmode="decimal" placeholder="W">
+      <input id="f-d" inputmode="decimal" placeholder="D">
+      <input id="f-h" inputmode="decimal" placeholder="H">
+    </div>
+    <div class="grid2">
+      <div><label for="f-weight">Weight (lb)</label><input id="f-weight" inputmode="decimal"></div>
+      <div><label for="f-value">Value ($)</label><input id="f-value" inputmode="decimal"></div>
+    </div>
+    <label for="f-brand">Brand / model</label>
+    <input id="f-brand">
+    <label for="f-notes">Notes</label>
+    <textarea id="f-notes" rows="3"></textarea>
+    <div style="margin-top:24px"><button id="delete-btn" class="danger" style="width:100%">Delete item</button></div>
+  </div>
+</div>
+<div id="viewer" hidden><img alt=""></div>
+<datalist id="dl-rooms"></datalist>
+<datalist id="dl-cats"></datalist>
+<div id="report"></div>
+
+<script>
+const $ = s => document.querySelector(s);
+const FILE_NAME = 'home-inventory.json';
+let items = [], dirty = false, fileHandle = null, editing = null, draftPhotos = [], lastSaved = null;
+
+/* ---------- local working copy (IndexedDB) ---------- */
+function idb(){return new Promise((res,rej)=>{const r=indexedDB.open('home-inventory',1);r.onupgradeneeded=()=>r.result.createObjectStore('kv');r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});}
+async function idbGet(k){try{const db=await idb();return await new Promise((res,rej)=>{const q=db.transaction('kv').objectStore('kv').get(k);q.onsuccess=()=>res(q.result);q.onerror=()=>rej(q.error);});}catch(e){return null;}}
+async function idbSet(k,v){try{const db=await idb();await new Promise((res,rej)=>{const tx=db.transaction('kv','readwrite');tx.objectStore('kv').put(v,k);tx.oncomplete=res;tx.onerror=()=>rej(tx.error);});}catch(e){console.warn(e);}}
+async function persist(){await idbSet('state',{items,dirty,lastSaved});updateStatus();}
+
+function updateStatus(){
+  const s=$('#status');
+  if(dirty){s.textContent='Unsaved changes — tap Save to update your data file';s.className='status dirty';$('#save-btn').hidden=false;}
+  else{s.textContent=lastSaved?'Saved to file '+new Date(lastSaved).toLocaleString():(items.length?'Not yet saved to a file':'Add your first item, then Save to a file in iCloud Drive');s.className='status';$('#save-btn').hidden=true;}
+}
+function markDirty(){dirty=true;persist();}
+function markSaved(){dirty=false;lastSaved=new Date().toISOString();persist();}
+
+/* ---------- file save / open ---------- */
+function exportJSON(){return JSON.stringify({app:'home-inventory',version:1,saved:new Date().toISOString(),items});}
+function download(blob,name){const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},2000);}
+async function shareOrDownload(data,name,type){
+  const file=new File([data],name,{type});
+  if(navigator.canShare&&navigator.canShare({files:[file]})){
+    try{await navigator.share({files:[file],title:name});return true;}catch(e){if(e.name==='AbortError')return false;}
+  }
+  download(file,name);return true;
+}
+async function saveFile(forceNew){
+  const data=exportJSON();
+  if(window.showSaveFilePicker){
+    try{
+      if(!fileHandle||forceNew)fileHandle=await showSaveFilePicker({suggestedName:FILE_NAME,types:[{description:'Inventory data',accept:{'application/json':['.json']}}]});
+      const w=await fileHandle.createWritable();await w.write(data);await w.close();markSaved();return;
+    }catch(e){if(e.name==='AbortError')return;fileHandle=null;}
+  }
+  if(await shareOrDownload(data,FILE_NAME,'application/json'))markSaved();
+}
+async function openFile(){
+  if(window.showOpenFilePicker){
+    try{const [h]=await showOpenFilePicker({types:[{description:'Inventory data',accept:{'application/json':['.json']}}]});const f=await h.getFile();if(await loadText(await f.text()))fileHandle=h;return;}
+    catch(e){if(e.name==='AbortError')return;}
+  }
+  $('#open-input').value='';$('#open-input').click();
+}
+$('#open-input').addEventListener('change',async e=>{const f=e.target.files[0];if(f){fileHandle=null;await loadText(await f.text());}});
+async function loadText(txt){
+  let data;try{data=JSON.parse(txt);}catch(e){alert('That file isn’t inventory data.');return false;}
+  const arr=Array.isArray(data)?data:data&&data.items;
+  if(!Array.isArray(arr)){alert('That file isn’t inventory data.');return false;}
+  if(items.length&&dirty&&!confirm('You have unsaved changes. Replace them with this file?'))return false;
+  items=arr;dirty=false;lastSaved=data.saved||new Date().toISOString();await persist();render();return true;
+}
+
+/* ---------- exports ---------- */
+const csvCell=v=>{v=v==null?'':String(v);return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;};
+function exportCSV(){
+  const rows=[['Item','Room','Category','Brand/Model','Width (in)','Depth (in)','Height (in)','Weight (lb)','Value ($)','Notes','Photos','Added']];
+  filtered().forEach(it=>rows.push([it.name,it.room,it.category,it.brand,it.w,it.d,it.h,it.weight,it.value,it.notes,(it.photos||[]).length,(it.created||'').slice(0,10)]));
+  shareOrDownload(rows.map(r=>r.map(csvCell).join(',')).join('\n'),'home-inventory.csv','text/csv');
+}
+function printReport(){
+  const list=filtered();
+  const total=list.reduce((s,it)=>s+(+it.value||0),0);
+  let html=`<h2>Home Inventory</h2><div>${new Date().toLocaleDateString()} · ${list.length} items${total?` · total value $${total.toLocaleString()}`:''}${describeFilter()}</div><br><table><thead><tr><th>Photo</th><th>Item</th><th>Category</th><th>W × D × H (in)</th><th>Weight</th><th>Value</th><th>Notes</th></tr></thead><tbody>`;
+  let room=null;
+  list.forEach(it=>{
+    if((it.room||'')!==room){room=it.room||'';html+=`<tr><td colspan="7" class="room">${esc(room||'No room')}</td></tr>`;}
+    const p=(it.photos||[])[0];
+    html+=`<tr><td>${p?`<img src="${p}">`:''}${(it.photos||[]).length>1?`<div>+${it.photos.length-1} more</div>`:''}</td><td><b>${esc(it.name||'')}</b>${it.brand?'<br>'+esc(it.brand):''}</td><td>${esc(it.category||'')}</td><td>${dims(it)}</td><td>${it.weight?fmt(it.weight)+' lb':''}</td><td>${it.value?'$'+(+it.value).toLocaleString():''}</td><td>${esc(it.notes||'')}</td></tr>`;
+  });
+  $('#report').innerHTML=html+'</tbody></table>';
+  setTimeout(()=>window.print(),100);
+}
+function describeFilter(){const p=[];if($('#f-room').value)p.push($('#f-room').value);if($('#f-cat').value)p.push($('#f-cat').value);if($('#q').value.trim())p.push('“'+$('#q').value.trim()+'”');return p.length?' · filtered: '+esc(p.join(', ')):'';}
+
+/* ---------- list ---------- */
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const fmt=n=>(n===''||n==null||isNaN(+n))?'':String(Math.round(+n*100)/100);
+const dims=it=>[it.w,it.d,it.h].some(v=>v!==''&&v!=null)?[it.w,it.d,it.h].map(v=>fmt(v)||'–').join(' × '):'';
+function filtered(){
+  const q=$('#q').value.trim().toLowerCase(),room=$('#f-room').value,cat=$('#f-cat').value;
+  const fw=+$('#fit-w').value||0,fd=+$('#fit-d').value||0,fh=+$('#fit-h').value||0;
+  return items.filter(it=>{
+    if(room&&(it.room||'')!==room)return false;
+    if(cat&&(it.category||'')!==cat)return false;
+    if(q){const hay=[it.name,it.room,it.category,it.brand,it.notes,it.dictation].join(' ').toLowerCase();if(!q.split(/\s+/).every(w=>hay.includes(w)))return false;}
+    if(fw||fd||fh){
+      const w=+it.w||0,d=+it.d||0,h=+it.h||0;
+      if(!w&&!d&&!h)return false;
+      if(fh&&h>fh)return false;
+      const ok=(a,b)=>(!fw||a<=fw)&&(!fd||b<=fd);
+      if(!(ok(w,d)||ok(d,w)))return false;
+    }
+    return true;
+  }).sort((a,b)=>(a.room||'').localeCompare(b.room||'')||(a.name||'').localeCompare(b.name||''));
+}
+const ROOMS=['Great room','Kitchen','Dining','Primary bedroom','Bedroom','Study','Garage','Patio','Storage'];
+const CATS=['Furniture','Electronics','Appliance','Art & decor','Lighting','Rug','Kitchenware','Tools','Outdoor','Other'];
+function refreshLists(){
+  const uniq=k=>[...new Set(items.map(i=>i[k]).filter(Boolean))].sort();
+  const setSel=(sel,vals,label)=>{const cur=sel.value;sel.innerHTML=`<option value="">${label}</option>`+vals.map(v=>`<option>${esc(v)}</option>`).join('');sel.value=vals.includes(cur)?cur:'';};
+  setSel($('#f-room'),uniq('room'),'All rooms');setSel($('#f-cat'),uniq('category'),'All categories');
+  $('#dl-rooms').innerHTML=[...new Set([...uniq('room'),...ROOMS])].map(v=>`<option value="${esc(v)}">`).join('');
+  $('#dl-cats').innerHTML=[...new Set([...uniq('category'),...CATS])].map(v=>`<option value="${esc(v)}">`).join('');
+}
+function render(){
+  refreshLists();
+  const list=filtered();
+  const total=list.reduce((s,it)=>s+(+it.value||0),0);
+  $('#summary').textContent=items.length?`${list.length} of ${items.length} items${total?` · $${total.toLocaleString()} value`:''}`:'';
+  $('#list').innerHTML=list.length?list.map(it=>{
+    const p=(it.photos||[])[0];
+    const meta=[it.room,it.category].filter(Boolean).join(' · ');
+    const d=dims(it);
+    return `<div class="card" data-id="${it.id}">${p?`<img class="thumb" src="${p}" alt="">`:'<div class="thumb">No photo</div>'}<div><h3>${esc(it.name||'Untitled')}</h3>${d?`<div class="dims">${d} in</div>`:''}<div class="meta">${esc(meta)}${it.value?` · $${(+it.value).toLocaleString()}`:''}</div></div></div>`;
+  }).join(''):`<div class="empty">${items.length?'No items match.':'Tap “+ Add item” to photograph and describe your first item.'}</div>`;
+  updateStatus();
+}
+$('#list').addEventListener('click',e=>{const c=e.target.closest('.card');if(c)openSheet(items.find(i=>i.id===c.dataset.id));});
+['#q','#f-room','#f-cat','#fit-w','#fit-d','#fit-h'].forEach(s=>$(s).addEventListener('input',render));
+$('#filter-btn').onclick=()=>{$('#filters').hidden=!$('#filters').hidden;};
+
+/* ---------- dictation parsing ---------- */
+const ONES='zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen';
+const TENS='twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety';
+const NW=`(?:(?:${TENS})(?:[\\s-](?:one|two|three|four|five|six|seven|eight|nine))?|${ONES})`;
+function wordNum(s){const o=ONES.split('|'),t=TENS.split('|');s=s.toLowerCase().split(/[\s-]+/);let n=0;s.forEach(w=>{if(t.includes(w))n+=(t.indexOf(w)+2)*10;else if(o.includes(w))n+=o.indexOf(w);});return n;}
+function normalizeNums(t){
+  t=t.replace(new RegExp(`\\b(${NW})\\b(?=\\s+(?:and a half\\s+)?(?:inches|inch|in\\b|feet|foot|ft|cm|centimeters?|wide|deep|high|tall|long|by|x|pounds?|lbs?|dollars?))`,'gi'),m=>wordNum(m));
+  t=t.replace(new RegExp(`\\b(by|x|width|depth|height|length|weight|weighs|value|worth|cost|paid)\\s+(?:is\\s+|of\\s+)?(${NW})\\b`,'gi'),(m,a,b)=>m.replace(b,wordNum(b)));
+  return t;
+}
+const N='(\\d+(?:\\.\\d+)?(?:\\s*(?:and\\s+)?(?:a\\s+half|1\\/2|½|3\\/4|three\\s+quarters|1\\/4|a\\s+quarter))?)';
+const U='(?:\\s*(inches|inch|in\\b|"|centimeters?|cm|millimeters?|mm|feet|foot|ft|meters?|m\\b))?';
+function toNum(s){let n=parseFloat(s);if(/half|1\/2|½/.test(s))n+=.5;else if(/3\/4|three\s+quarters/.test(s))n+=.75;else if(/1\/4|quarter/.test(s))n+=.25;return n;}
+function inches(n,u){u=(u||'').toLowerCase();let f=1;if(/^(cm|centimeter)/.test(u))f=1/2.54;else if(/^(mm|millimeter)/.test(u))f=1/25.4;else if(/^(f|foot)/.test(u))f=12;else if(/^m/.test(u))f=39.37;return Math.round(toNum(n)*f*100)/100;}
+const AXIS=w=>/^(wid|wide|len|long)/i.test(w)?'w':/^(dep|deep)/i.test(w)?'d':'h';
+const cap=s=>s?s.charAt(0).toUpperCase()+s.slice(1):s;
+function clean(s){return s.replace(/\s*;\s*/g,' ').replace(/\s+/g,' ').replace(/^[\s,.;:–-]+|[\s,.;:–-]+$/g,'').replace(/\s+and$/i,'').replace(/^(?:the|a|an)\s+/i,'').trim();}
+
+function parseDictation(raw){
+  const out={};
+  const nm=raw.match(/\bnotes?\b\s*(?:is|are|:|-)?\s*/i);
+  if(nm){const n=raw.slice(nm.index+nm[0].length).trim();if(n)out.notes=cap(n);}
+  let t=' '+normalizeNums(nm?raw.slice(0,nm.index):raw)+' ';
+  const cut=(re,fn)=>{t=t.replace(re,(...a)=>{fn(a);return ' ; ';});};
+  // 60 by 20 by 34 inches
+  cut(new RegExp(N+U+'\\s*(?:by|x|×|\\*)\\s*'+N+U+'\\s*(?:by|x|×|\\*)\\s*'+N+U,'gi'),a=>{const u=a[6]||a[4]||a[2];out.w=inches(a[1],a[2]||u);out.d=inches(a[3],a[4]||u);out.h=inches(a[5],a[6]||u);});
+  // 8 by 10 feet (rugs, tabletops) → width × depth
+  cut(new RegExp(N+U+'\\s*(?:by|x|×|\\*)\\s*'+N+U+'(?!\\s*(?:wide|long|deep|high|tall))','gi'),a=>{const u=a[4]||a[2];out.w=inches(a[1],a[2]||u);out.d=inches(a[3],a[4]||u);});
+  // width 60 / height is 34 inches
+  cut(new RegExp('\\b(width|length|depth|height)\\s*(?:is|of|:|=)?\\s*'+N+U,'gi'),a=>{out[AXIS(a[1])]=inches(a[2],a[3]);});
+  // 60 wide / 34 inches tall
+  cut(new RegExp(N+U+'\\s*(wide|long|deep|high|tall)\\b','gi'),a=>{out[AXIS(a[3])]=inches(a[1],a[2]);});
+  // weight
+  const kg=(n,u)=>Math.round(toNum(n)*(/^k/i.test(u||'')?2.2046:1)*10)/10;
+  cut(new RegExp('\\b(?:weight|weighs)\\s*(?:is|of|about|around|roughly|:)?\\s*'+N+'\\s*(pounds?|lbs?|kg|kilos?|kilograms?)?','gi'),a=>{out.weight=kg(a[1],a[2]);});
+  cut(new RegExp(N+'\\s*(pounds?|lbs?|kg|kilos?|kilograms?)\\b','gi'),a=>{out.weight=kg(a[1],a[2]);});
+  // value
+  const money=(n,k)=>Math.round(parseFloat(n.replace(/,/g,''))*(/^(k|thousand)/i.test(k||'')?1000:1)*100)/100;
+  cut(/\b(?:value|valued at|worth|cost|costs|paid|price|replacement cost)\s*(?:is|of|about|around|was|:)?\s*(?:about\s*)?\$?\s*(\d[\d,]*(?:\.\d+)?)\s*(k\b|thousand|dollars?|bucks)?/gi,a=>{out.value=money(a[1],a[2]);});
+  cut(/\$\s*(\d[\d,]*(?:\.\d+)?)\s*(k\b|thousand)?/g,a=>{out.value=money(a[1],a[2]);});
+  cut(/\b(\d[\d,]*(?:\.\d+)?)\s*(thousand\s+)?(?:dollars|bucks)\b/gi,a=>{out.value=money(a[1],a[2]);});
+  // tidy connectors left between removed measurements ("; by ;")
+  for(let i=0;i<3;i++)t=t.replace(/;\s*(?:by|x|×|and|,)\s*(?=;)/gi,'; ');
+  // labelled text fields
+  const LBL=/\b(name|item|location|category|brand|room|model|type)\b(\s*(?:is|:|-)\s*|\s+)/gi;
+  const marks=[];let m;
+  while((m=LBL.exec(t))){
+    const w=m[1].toLowerCase();
+    if(['room','model','type'].includes(w)){
+      const before=t.slice(0,m.index).trimEnd();
+      if(before&&!/[,.;:!?]$/.test(before)&&!/is|:|-/.test(m[2]))continue;
+    }
+    marks.push({w,start:m.index,end:m.index+m[0].length});
+  }
+  const map={name:'name',item:'name',location:'room',room:'room',category:'category',type:'category',brand:'brand',model:'model'};
+  marks.forEach((mk,i)=>{const seg=clean(t.slice(mk.end,marks[i+1]?marks[i+1].start:t.length));if(seg&&/[a-z]/i.test(seg))out[map[mk.w]]=seg;});
+  const pre=clean(t.slice(0,marks.length?marks[0].start:t.length));
+  if(!out.name&&pre&&/[a-z]/i.test(pre)&&pre.length<80)out.name=pre;
+  if(out.model){out.brand=[out.brand,out.model].filter(Boolean).join(' ');delete out.model;}
+  ['name','room','category'].forEach(k=>{if(out[k])out[k]=cap(out[k]);});
+  return out;
+}
+
+const FIELDS={name:'#f-name',room:'#f-room2',category:'#f-category',brand:'#f-brand',w:'#f-w',d:'#f-d',h:'#f-h',weight:'#f-weight',value:'#f-value',notes:'#f-notes'};
+let parseTimer;
+function applyDictation(){
+  const p=parseDictation($('#f-dictation').value);
+  Object.entries(p).forEach(([k,v])=>{if(FIELDS[k])$(FIELDS[k]).value=v;});
+  const got=Object.keys(p).filter(k=>FIELDS[k]);
+  $('#parsed').textContent=got.length?'Filled: '+got.map(k=>({w:'width',d:'depth',h:'height'}[k]||k)).join(', '):'';
+}
+$('#f-dictation').addEventListener('input',()=>{clearTimeout(parseTimer);parseTimer=setTimeout(applyDictation,350);});
+
+/* optional in-browser speech (where supported) */
+const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+let rec=null;
+if(SR){
+  $('#mic-btn').hidden=false;
+  $('#mic-btn').onclick=()=>{
+    if(rec){rec.stop();return;}
+    rec=new SR();rec.lang='en-US';rec.continuous=true;rec.interimResults=false;
+    rec.onresult=e=>{for(let i=e.resultIndex;i<e.results.length;i++)if(e.results[i].isFinal){const ta=$('#f-dictation');ta.value=(ta.value.trim()+' '+e.results[i][0].transcript.trim()).trim()+', ';}applyDictation();};
+    rec.onend=()=>{rec=null;$('#mic-btn').textContent='Start dictation';};
+    rec.onerror=()=>{};
+    rec.start();$('#mic-btn').textContent='Stop dictation';
+  };
+}
+
+/* ---------- photos ---------- */
+function compress(file){return new Promise((res,rej)=>{const img=new Image(),url=URL.createObjectURL(file);img.onload=()=>{const max=1600,s=Math.min(1,max/Math.max(img.width,img.height));const c=document.createElement('canvas');c.width=Math.round(img.width*s);c.height=Math.round(img.height*s);c.getContext('2d').drawImage(img,0,0,c.width,c.height);URL.revokeObjectURL(url);res(c.toDataURL('image/jpeg',0.75));};img.onerror=()=>{URL.revokeObjectURL(url);rej(new Error('Could not read image'));};img.src=url;});}
+async function addFiles(files){for(const f of files){try{draftPhotos.push(await compress(f));}catch(e){alert(e.message);}}renderPhotos();}
+function renderPhotos(){$('#photos').innerHTML=draftPhotos.map((p,i)=>`<div class="ph"><img src="${p}" data-i="${i}" alt=""><button data-del="${i}" aria-label="Remove photo">×</button></div>`).join('');}
+$('#photos').addEventListener('click',e=>{
+  if(e.target.dataset.del!=null){if(confirm('Remove this photo?')){draftPhotos.splice(+e.target.dataset.del,1);renderPhotos();}}
+  else if(e.target.dataset.i!=null){$('#viewer img').src=draftPhotos[+e.target.dataset.i];$('#viewer').hidden=false;}
+});
+$('#viewer').onclick=()=>{$('#viewer').hidden=true;};
+$('#cam-btn').onclick=()=>{$('#cam').value='';$('#cam').click();};
+$('#lib-btn').onclick=()=>{$('#lib').value='';$('#lib').click();};
+$('#cam').onchange=e=>addFiles(e.target.files);
+$('#lib').onchange=e=>addFiles(e.target.files);
+
+/* ---------- edit sheet ---------- */
+function openSheet(it){
+  editing=it||null;
+  draftPhotos=it?[...(it.photos||[])]:[];
+  $('#sheet-title').textContent=it?'Edit item':'New item';
+  $('#f-dictation').value=it?.dictation||'';
+  Object.entries(FIELDS).forEach(([k,s])=>{$(s).value=it?(it[k]??''):'';});
+  $('#parsed').textContent='';
+  $('#delete-btn').hidden=!it;
+  renderPhotos();
+  $('#sheet').hidden=false;$('#sheet').scrollTop=0;
+}
+function closeSheet(){if(rec)rec.stop();$('#sheet').hidden=true;editing=null;draftPhotos=[];}
+$('#add-btn').onclick=()=>openSheet(null);
+$('#cancel-btn').onclick=closeSheet;
+$('#done-btn').onclick=()=>{
+  const it=editing||{id:Date.now().toString(36)+Math.random().toString(36).slice(2,6),created:new Date().toISOString()};
+  Object.entries(FIELDS).forEach(([k,s])=>{const v=$(s).value.trim();it[k]=['w','d','h','weight','value'].includes(k)?(v===''||isNaN(+v)?'':+v):v;});
+  it.dictation=$('#f-dictation').value.trim();
+  it.photos=draftPhotos;it.updated=new Date().toISOString();
+  if(!it.name&&!it.photos.length&&!it.dictation){closeSheet();return;}
+  if(!editing)items.push(it);
+  closeSheet();markDirty();render();
+};
+$('#delete-btn').onclick=()=>{if(editing&&confirm('Delete “'+(editing.name||'this item')+'”?')){items=items.filter(i=>i!==editing);closeSheet();markDirty();render();}};
+
+/* ---------- menu ---------- */
+$('#menu-btn').onclick=e=>{e.stopPropagation();$('#menu').hidden=!$('#menu').hidden;};
+document.addEventListener('click',()=>{$('#menu').hidden=true;});
+$('#menu').addEventListener('click',async e=>{
+  const a=e.target.dataset.act;if(!a)return;
+  $('#menu').hidden=true;
+  if(a==='open')openFile();
+  if(a==='save')saveFile(false);
+  if(a==='saveas')saveFile(true);
+  if(a==='csv')exportCSV();
+  if(a==='print')printReport();
+  if(a==='clear'&&confirm(dirty?'You have unsaved changes. Start a new, empty inventory anyway?':'Start a new, empty inventory? (Your saved file is not affected.)')){items=[];dirty=false;lastSaved=null;fileHandle=null;await persist();render();}
+});
+$('#save-btn').onclick=()=>saveFile(false);
+window.addEventListener('beforeunload',e=>{if(dirty){e.preventDefault();e.returnValue='';}});
+
+/* ---------- start ---------- */
+(async()=>{const s=await idbGet('state');if(s){items=s.items||[];dirty=!!s.dirty;lastSaved=s.lastSaved||null;}render();})();
+</script>
+</body>
+</html>
