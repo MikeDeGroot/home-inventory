@@ -52,7 +52,9 @@ main{padding:10px 16px;display:grid;gap:10px}
 .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:0 8px}
 .parsed{font-size:12px;color:var(--accent);min-height:16px;margin-top:4px}
 #viewer{position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:40;display:flex;align-items:center;justify-content:center}
-#viewer img{max-width:100%;max-height:100%}
+#viewer img{max-width:100%;max-height:calc(100% - 90px)}
+#viewer .vbar{position:absolute;left:0;right:0;bottom:calc(env(safe-area-inset-bottom) + 16px);display:flex;gap:10px;justify-content:center}
+#viewer .vbar button{min-width:120px}
 #report{display:none}
 @media print{
   header,main,.fab,.sheet,.menu,.summary,#viewer{display:none!important}
@@ -141,7 +143,7 @@ main{padding:10px 16px;display:grid;gap:10px}
     <div style="margin-top:24px"><button id="delete-btn" class="danger" style="width:100%">Delete item</button></div>
   </div>
 </div>
-<div id="viewer" hidden><img alt=""></div>
+<div id="viewer" hidden><img alt=""><div class="vbar"><button id="v-copy" class="primary">Copy photo</button><button id="v-close">Close</button></div></div>
 <datalist id="dl-rooms"></datalist>
 <datalist id="dl-cats"></datalist>
 <div id="report"></div>
@@ -366,7 +368,17 @@ $('#photos').addEventListener('click',e=>{
   if(e.target.dataset.del!=null){if(confirm('Remove this photo?')){draftPhotos.splice(+e.target.dataset.del,1);renderPhotos();}}
   else if(e.target.dataset.i!=null){$('#viewer img').src=draftPhotos[+e.target.dataset.i];$('#viewer').hidden=false;}
 });
-$('#viewer').onclick=()=>{$('#viewer').hidden=true;};
+$('#viewer').onclick=e=>{if(e.target.id==='viewer')$('#viewer').hidden=true;};
+$('#v-close').onclick=()=>{$('#viewer').hidden=true;};
+function toPng(src){return new Promise((res,rej)=>{const img=new Image();img.onload=()=>{const c=document.createElement('canvas');c.width=img.naturalWidth;c.height=img.naturalHeight;c.getContext('2d').drawImage(img,0,0);c.toBlob(b=>b?res(b):rej(new Error('Could not convert image')),'image/png');};img.onerror=()=>rej(new Error('Could not read image'));img.src=src;});}
+$('#v-copy').onclick=async()=>{
+  const btn=$('#v-copy'),src=$('#viewer img').src;
+  const done=t=>{btn.textContent=t;setTimeout(()=>{btn.textContent='Copy photo';},1500);};
+  if(navigator.clipboard&&window.ClipboardItem){
+    try{await navigator.clipboard.write([new ClipboardItem({'image/png':toPng(src)})]);done('Copied ✓');return;}catch(e){console.warn(e);}
+  }
+  try{const b=await toPng(src);if(await shareOrDownload(b,'photo.png','image/png'))done('Shared');}catch(e){alert('Could not copy this photo.');}
+};
 $('#cam-btn').onclick=()=>{$('#cam').value='';$('#cam').click();};
 $('#lib-btn').onclick=()=>{$('#lib').value='';$('#lib').click();};
 $('#cam').onchange=e=>addFiles(e.target.files);
