@@ -15,7 +15,7 @@ body{margin:0;font:16px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,s
 header{position:sticky;top:0;z-index:5;background:var(--bg);padding:calc(env(safe-area-inset-top) + 10px) 16px 10px;border-bottom:1px solid var(--line)}
 .top{display:flex;align-items:center;gap:8px}
 h1{font-size:20px;margin:0;flex:1}
-.status{font-size:12px;color:var(--muted);margin-top:2px}
+.status{font-size:12px;color:var(--muted);margin-top:2px;white-space:pre-line}
 .status.dirty{color:var(--warn)}
 button{font:inherit;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:10px;padding:8px 12px;cursor:pointer}
 button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600}
@@ -151,7 +151,7 @@ main{padding:10px 16px;display:grid;gap:10px}
 <script>
 const $ = s => document.querySelector(s);
 const FILE_NAME = 'home-inventory.json';
-let items = [], dirty = false, fileHandle = null, editing = null, draftPhotos = [], lastSaved = null, deleted = {}, lastSavedOn = '';
+let items = [], dirty = false, fileHandle = null, editing = null, draftPhotos = [], lastSaved = null, deleted = {}, lastSavedOn = '', loadedFrom = '';
 function deviceName(){const u=navigator.userAgent;const d=(/iPad/.test(u)||(/Macintosh/.test(u)&&navigator.maxTouchPoints>1))?'iPad':/iPhone/.test(u)?'iPhone':/Android/.test(u)?'Android':/Mac/.test(u)?'Mac':/Windows/.test(u)?'Windows PC':'computer';const b=/Edg/.test(u)?'Edge':/CriOS|Chrome/.test(u)?'Chrome':/FxiOS|Firefox/.test(u)?'Firefox':/Safari/.test(u)?'Safari':'browser';return d+' '+b;}
 const fmtWhen=x=>new Date(x).toLocaleString([],{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});
 function fileName(){const d=new Date(),p=n=>String(n).padStart(2,'0');return `home-inventory ${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}${p(d.getMinutes())}.json`;}
@@ -160,12 +160,13 @@ function fileName(){const d=new Date(),p=n=>String(n).padStart(2,'0');return `ho
 function idb(){return new Promise((res,rej)=>{const r=indexedDB.open('home-inventory',1);r.onupgradeneeded=()=>r.result.createObjectStore('kv');r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});}
 async function idbGet(k){try{const db=await idb();return await new Promise((res,rej)=>{const q=db.transaction('kv').objectStore('kv').get(k);q.onsuccess=()=>res(q.result);q.onerror=()=>rej(q.error);});}catch(e){return null;}}
 async function idbSet(k,v){try{const db=await idb();await new Promise((res,rej)=>{const tx=db.transaction('kv','readwrite');tx.objectStore('kv').put(v,k);tx.oncomplete=res;tx.onerror=()=>rej(tx.error);});}catch(e){console.warn(e);}}
-async function persist(){await idbSet('state',{items,dirty,lastSaved,deleted,lastSavedOn});updateStatus();}
+async function persist(){await idbSet('state',{items,dirty,lastSaved,deleted,lastSavedOn,loadedFrom});updateStatus();}
 
 function updateStatus(){
   const s=$('#status');
   if(dirty){s.textContent='Unsaved changes — tap Save to update your data file';s.className='status dirty';$('#save-btn').hidden=false;}
   else{s.textContent=lastSaved?'Last saved '+fmtWhen(lastSaved)+(lastSavedOn?' on '+lastSavedOn:''):(items.length?'Not yet saved to a file':'Add your first item, then Save to a file in iCloud Drive');s.className='status';$('#save-btn').hidden=true;}
+  if(loadedFrom)s.textContent+='\nFile: '+loadedFrom;
 }
 function markDirty(){dirty=true;persist();}
 function markSaved(){dirty=false;lastSaved=new Date().toISOString();lastSavedOn=deviceName();persist();}
@@ -185,19 +186,19 @@ async function saveFile(forceNew){
   if(window.showSaveFilePicker){
     try{
       if(!fileHandle||forceNew)fileHandle=await showSaveFilePicker({suggestedName:fileName(),types:[{description:'Inventory data',accept:{'application/json':['.json']}}]});
-      const w=await fileHandle.createWritable();await w.write(data);await w.close();markSaved();return;
+      const w=await fileHandle.createWritable();await w.write(data);await w.close();loadedFrom=fileHandle.name;markSaved();return;
     }catch(e){if(e.name==='AbortError')return;fileHandle=null;}
   }
-  if(await shareOrDownload(data,fileName(),'application/json'))markSaved();
+  {const n=fileName();if(await shareOrDownload(data,n,'application/json')){loadedFrom=n;markSaved();}}
 }
 async function openFile(){
   if(window.showOpenFilePicker){
-    try{const hs=await showOpenFilePicker({multiple:true,types:[{description:'Inventory data',accept:{'application/json':['.json']}}]});const texts=[];for(const h of hs)texts.push(await (await h.getFile()).text());await mergeTexts(texts,hs.length===1?hs[0]:null);return;}
+    try{const hs=await showOpenFilePicker({multiple:true,types:[{description:'Inventory data',accept:{'application/json':['.json']}}]});const texts=[];for(const h of hs)texts.push(await (await h.getFile()).text());await mergeTexts(texts,hs.length===1?hs[0]:null,hs.map(h=>h.name));return;}
     catch(e){if(e.name==='AbortError')return;}
   }
   $('#open-input').value='';$('#open-input').click();
 }
-$('#open-input').addEventListener('change',async e=>{const fs=[...e.target.files];if(fs.length){const texts=[];for(const f of fs)texts.push(await f.text());await mergeTexts(texts,null);}});
+$('#open-input').addEventListener('change',async e=>{const fs=[...e.target.files];if(fs.length){const texts=[];for(const f of fs)texts.push(await f.text());await mergeTexts(texts,null,fs.map(f=>f.name));}});
 const stamp=it=>it.updated||it.created||'';
 function parseInv(txt){try{const d=JSON.parse(txt);const arr=Array.isArray(d)?d:d&&d.items;if(!Array.isArray(arr))return null;return {items:arr.filter(i=>i&&i.id),deleted:(d&&d.deleted)||{},saved:(d&&d.saved)||'',savedOn:(d&&d.savedOn)||''};}catch(e){return null;}}
 function mergeSets(sets){
@@ -209,8 +210,8 @@ function mergeSets(sets){
   return {items:[...best.values()].filter(it=>!(del[it.id]&&del[it.id]>=stamp(it))),deleted:del};
 }
 const sig=s=>s.items.map(i=>i.id+'@'+stamp(i)).sort().join('|');
-async function mergeTexts(texts,handle){
-  const files=texts.map(parseInv).filter(Boolean),bad=texts.length-files.length;
+async function mergeTexts(texts,handle,names=[]){
+  const files=texts.map((t,i)=>{const f=parseInv(t);if(f)f.name=names[i]||'';return f;}).filter(Boolean),bad=texts.length-files.length;
   if(!files.length){alert('Those files aren’t inventory data.');return;}
   const before=new Map(items.map(i=>[i.id,stamp(i)]));
   const m=mergeSets([{items,deleted},...files]);
@@ -223,10 +224,12 @@ async function mergeTexts(texts,handle){
   dirty=!files.some(f=>sig(f)===sig(m));
   if(newest.saved){lastSaved=newest.saved;lastSavedOn=newest.savedOn||'';}
   fileHandle=(handle&&!dirty)?handle:null;
+  loadedFrom=(newest.name||'file')+(files.length>1?` (+${files.length-1} more)`:'');
   await persist();render();
   let msg=`Combined ${files.length} file${files.length>1?'s':''} → ${items.length} items.`;
   const ch=[added&&`${added} new`,changed&&`${changed} updated`,removed&&`${removed} removed`].filter(Boolean);
   msg+=ch.length?' '+ch.join(', ')+'.':' No changes.';
+  msg+='\n\nFiles:\n'+files.map(f=>(f===newest?'• ':'  ')+(f.name||'(unnamed)')).join('\n');
   if(bad)msg+=`\n${bad} file${bad>1?'s were':' was'} skipped (not inventory data).`;
   if(dirty)msg+='\n\nTap Save to write one up-to-date file. After that, you can delete the older copies.';
   alert(msg);
@@ -450,13 +453,13 @@ $('#menu').addEventListener('click',async e=>{
   if(a==='saveas')saveFile(true);
   if(a==='csv')exportCSV();
   if(a==='print')printReport();
-  if(a==='clear'&&confirm(dirty?'You have unsaved changes. Start a new, empty inventory anyway?':'Start a new, empty inventory? (Your saved file is not affected.)')){items=[];deleted={};dirty=false;lastSaved=null;lastSavedOn='';fileHandle=null;await persist();render();}
+  if(a==='clear'&&confirm(dirty?'You have unsaved changes. Start a new, empty inventory anyway?':'Start a new, empty inventory? (Your saved file is not affected.)')){items=[];deleted={};dirty=false;lastSaved=null;lastSavedOn='';loadedFrom='';fileHandle=null;await persist();render();}
 });
 $('#save-btn').onclick=()=>saveFile(false);
 window.addEventListener('beforeunload',e=>{if(dirty){e.preventDefault();e.returnValue='';}});
 
 /* ---------- start ---------- */
-(async()=>{const s=await idbGet('state');if(s){items=s.items||[];dirty=!!s.dirty;lastSaved=s.lastSaved||null;deleted=s.deleted||{};lastSavedOn=s.lastSavedOn||'';}render();})();
+(async()=>{const s=await idbGet('state');if(s){items=s.items||[];dirty=!!s.dirty;lastSaved=s.lastSaved||null;deleted=s.deleted||{};lastSavedOn=s.lastSavedOn||'';loadedFrom=s.loadedFrom||'';}render();})();
 </script>
 </body>
 </html>
