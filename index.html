@@ -151,7 +151,7 @@ main{padding:10px 16px;display:grid;gap:10px}
 <script>
 const $ = s => document.querySelector(s);
 const FILE_NAME = 'home-inventory.json';
-let items = [], dirty = false, fileHandle = null, editing = null, draftPhotos = [], lastSaved = null, deleted = {}, lastSavedOn = '', loadedFrom = '';
+let items = [], dirty = false, fileHandle = null, editing = null, draftPhotos = [], lastSaved = null, deleted = {}, lastSavedOn = '', loadedFrom = '', lastPicked = null;
 function deviceName(){const u=navigator.userAgent;const d=(/iPad/.test(u)||(/Macintosh/.test(u)&&navigator.maxTouchPoints>1))?'iPad':/iPhone/.test(u)?'iPhone':/Android/.test(u)?'Android':/Mac/.test(u)?'Mac':/Windows/.test(u)?'Windows PC':'computer';const b=/Edg/.test(u)?'Edge':/CriOS|Chrome/.test(u)?'Chrome':/FxiOS|Firefox/.test(u)?'Firefox':/Safari/.test(u)?'Safari':'browser';return d+' '+b;}
 const fmtWhen=x=>new Date(x).toLocaleString([],{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});
 function fileName(){const d=new Date(),p=n=>String(n).padStart(2,'0');return `home-inventory ${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}.json`;}
@@ -186,15 +186,15 @@ async function saveFile(forceNew){
   const data=exportJSON();
   if(window.showSaveFilePicker){
     try{
-      if(!fileHandle||forceNew)fileHandle=await showSaveFilePicker({suggestedName:fileName(),types:[{description:'Inventory data',accept:{'application/json':['.json']}}]});
-      const w=await fileHandle.createWritable();await w.write(data);await w.close();loadedFrom=fileHandle.name;markSaved();return;
+      if(!fileHandle||forceNew)fileHandle=await showSaveFilePicker({suggestedName:fileName(),...((fileHandle||lastPicked)?{startIn:fileHandle||lastPicked}:{}),types:[{description:'Inventory data',accept:{'application/json':['.json']}}]});
+      const w=await fileHandle.createWritable();await w.write(data);await w.close();loadedFrom=fileHandle.name;lastPicked=fileHandle;idbSet('lastPicked',lastPicked);markSaved();return;
     }catch(e){if(e.name==='AbortError')return;fileHandle=null;}
   }
   {const n=fileName();if(await shareOrDownload(data,n,'application/json')){loadedFrom=n;markSaved();}}
 }
 async function openFile(){
   if(window.showOpenFilePicker){
-    try{const hs=await showOpenFilePicker({multiple:true,types:[{description:'Inventory data',accept:{'application/json':['.json']}}]});const texts=[];for(const h of hs)texts.push(await (await h.getFile()).text());await mergeTexts(texts,hs.length===1?hs[0]:null,hs.map(h=>h.name));return;}
+    try{const hs=await showOpenFilePicker({multiple:true,...(lastPicked?{startIn:lastPicked}:{}),types:[{description:'Inventory data',accept:{'application/json':['.json']}}]});lastPicked=hs[0];idbSet('lastPicked',lastPicked);const texts=[];for(const h of hs)texts.push(await (await h.getFile()).text());await mergeTexts(texts,hs.length===1?hs[0]:null,hs.map(h=>h.name));return;}
     catch(e){if(e.name==='AbortError')return;}
   }
   $('#open-input').value='';$('#open-input').click();
@@ -460,7 +460,7 @@ $('#save-btn').onclick=()=>saveFile(false);
 window.addEventListener('beforeunload',e=>{if(dirty){e.preventDefault();e.returnValue='';}});
 
 /* ---------- start ---------- */
-(async()=>{const s=await idbGet('state');if(s){items=s.items||[];dirty=!!s.dirty;lastSaved=s.lastSaved||null;deleted=s.deleted||{};lastSavedOn=s.lastSavedOn||'';loadedFrom=s.loadedFrom||'';}render();})();
+(async()=>{lastPicked=await idbGet('lastPicked')||null;const s=await idbGet('state');if(s){items=s.items||[];dirty=!!s.dirty;lastSaved=s.lastSaved||null;deleted=s.deleted||{};lastSavedOn=s.lastSavedOn||'';loadedFrom=s.loadedFrom||'';}render();})();
 </script>
 </body>
 </html>
