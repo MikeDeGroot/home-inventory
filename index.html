@@ -176,7 +176,8 @@ function exportJSON(){return JSON.stringify({app:'home-inventory',version:2,save
 function download(blob,name){const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},2000);}
 async function shareOrDownload(data,name,type){
   const file=new File([data],name,{type});
-  if(navigator.canShare&&navigator.canShare({files:[file]})){
+  const u=navigator.userAgent,mobile=/iPhone|iPad|Android/.test(u)||(/Macintosh/.test(u)&&navigator.maxTouchPoints>1);
+  if(mobile&&navigator.canShare&&navigator.canShare({files:[file]})){
     try{await navigator.share({files:[file],title:name});return true;}catch(e){if(e.name==='AbortError')return false;}
   }
   download(file,name);return true;
