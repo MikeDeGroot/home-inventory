@@ -178,7 +178,7 @@ async function shareOrDownload(data,name,type){
   const file=new File([data],name,{type});
   const u=navigator.userAgent,mobile=/iPhone|iPad|Android/.test(u)||(/Macintosh/.test(u)&&navigator.maxTouchPoints>1);
   if(mobile&&navigator.canShare&&navigator.canShare({files:[file]})){
-    try{await navigator.share({files:[file],title:name});return true;}catch(e){if(e.name==='AbortError')return false;}
+    try{await navigator.share({files:[file]});return true;}catch(e){if(e.name==='AbortError')return false;}
   }
   download(file,name);return true;
 }
