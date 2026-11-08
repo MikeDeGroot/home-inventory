@@ -154,7 +154,7 @@ const FILE_NAME = 'home-inventory.json';
 let items = [], dirty = false, fileHandle = null, editing = null, draftPhotos = [], lastSaved = null, deleted = {}, lastSavedOn = '', loadedFrom = '';
 function deviceName(){const u=navigator.userAgent;const d=(/iPad/.test(u)||(/Macintosh/.test(u)&&navigator.maxTouchPoints>1))?'iPad':/iPhone/.test(u)?'iPhone':/Android/.test(u)?'Android':/Mac/.test(u)?'Mac':/Windows/.test(u)?'Windows PC':'computer';const b=/Edg/.test(u)?'Edge':/CriOS|Chrome/.test(u)?'Chrome':/FxiOS|Firefox/.test(u)?'Firefox':/Safari/.test(u)?'Safari':'browser';return d+' '+b;}
 const fmtWhen=x=>new Date(x).toLocaleString([],{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});
-function fileName(){const d=new Date(),p=n=>String(n).padStart(2,'0');return `home-inventory ${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}${p(d.getMinutes())}.json`;}
+function fileName(){const d=new Date(),p=n=>String(n).padStart(2,'0');return `home-inventory ${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}.json`;}
 
 /* ---------- local working copy (IndexedDB) ---------- */
 function idb(){return new Promise((res,rej)=>{const r=indexedDB.open('home-inventory',1);r.onupgradeneeded=()=>r.result.createObjectStore('kv');r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});}
