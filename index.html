@@ -88,7 +88,7 @@ main{padding:10px 16px;display:grid;gap:10px}
   </div>
 </header>
 <div id="menu" class="menu" hidden>
-  <button data-act="open">Open data file…</button>
+  <button data-act="open">Open / combine files…</button>
   <button data-act="save">Save data file</button>
   <button data-act="saveas">Save as new file…</button>
   <button data-act="csv">Export spreadsheet (CSV)</button>
@@ -98,7 +98,7 @@ main{padding:10px 16px;display:grid;gap:10px}
 <div id="summary" class="summary"></div>
 <main id="list"></main>
 <button class="fab primary" id="add-btn">+ Add item</button>
-<input type="file" id="open-input" hidden>
+<input type="file" id="open-input" multiple hidden>
 
 <div id="sheet" class="sheet" hidden>
   <div class="sheet-head">
@@ -151,24 +151,27 @@ main{padding:10px 16px;display:grid;gap:10px}
 <script>
 const $ = s => document.querySelector(s);
 const FILE_NAME = 'home-inventory.json';
-let items = [], dirty = false, fileHandle = null, editing = null, draftPhotos = [], lastSaved = null;
+let items = [], dirty = false, fileHandle = null, editing = null, draftPhotos = [], lastSaved = null, deleted = {}, lastSavedOn = '';
+function deviceName(){const u=navigator.userAgent;const d=(/iPad/.test(u)||(/Macintosh/.test(u)&&navigator.maxTouchPoints>1))?'iPad':/iPhone/.test(u)?'iPhone':/Android/.test(u)?'Android':/Mac/.test(u)?'Mac':/Windows/.test(u)?'Windows PC':'computer';const b=/Edg/.test(u)?'Edge':/CriOS|Chrome/.test(u)?'Chrome':/FxiOS|Firefox/.test(u)?'Firefox':/Safari/.test(u)?'Safari':'browser';return d+' '+b;}
+const fmtWhen=x=>new Date(x).toLocaleString([],{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});
+function fileName(){const d=new Date(),p=n=>String(n).padStart(2,'0');return `home-inventory ${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}${p(d.getMinutes())}.json`;}
 
 /* ---------- local working copy (IndexedDB) ---------- */
 function idb(){return new Promise((res,rej)=>{const r=indexedDB.open('home-inventory',1);r.onupgradeneeded=()=>r.result.createObjectStore('kv');r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});}
 async function idbGet(k){try{const db=await idb();return await new Promise((res,rej)=>{const q=db.transaction('kv').objectStore('kv').get(k);q.onsuccess=()=>res(q.result);q.onerror=()=>rej(q.error);});}catch(e){return null;}}
 async function idbSet(k,v){try{const db=await idb();await new Promise((res,rej)=>{const tx=db.transaction('kv','readwrite');tx.objectStore('kv').put(v,k);tx.oncomplete=res;tx.onerror=()=>rej(tx.error);});}catch(e){console.warn(e);}}
-async function persist(){await idbSet('state',{items,dirty,lastSaved});updateStatus();}
+async function persist(){await idbSet('state',{items,dirty,lastSaved,deleted,lastSavedOn});updateStatus();}
 
 function updateStatus(){
   const s=$('#status');
   if(dirty){s.textContent='Unsaved changes — tap Save to update your data file';s.className='status dirty';$('#save-btn').hidden=false;}
-  else{s.textContent=lastSaved?'Saved to file '+new Date(lastSaved).toLocaleString():(items.length?'Not yet saved to a file':'Add your first item, then Save to a file in iCloud Drive');s.className='status';$('#save-btn').hidden=true;}
+  else{s.textContent=lastSaved?'Last saved '+fmtWhen(lastSaved)+(lastSavedOn?' on '+lastSavedOn:''):(items.length?'Not yet saved to a file':'Add your first item, then Save to a file in iCloud Drive');s.className='status';$('#save-btn').hidden=true;}
 }
 function markDirty(){dirty=true;persist();}
-function markSaved(){dirty=false;lastSaved=new Date().toISOString();persist();}
+function markSaved(){dirty=false;lastSaved=new Date().toISOString();lastSavedOn=deviceName();persist();}
 
 /* ---------- file save / open ---------- */
-function exportJSON(){return JSON.stringify({app:'home-inventory',version:1,saved:new Date().toISOString(),items});}
+function exportJSON(){return JSON.stringify({app:'home-inventory',version:2,saved:new Date().toISOString(),savedOn:deviceName(),items,deleted});}
 function download(blob,name){const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},2000);}
 async function shareOrDownload(data,name,type){
   const file=new File([data],name,{type});
@@ -181,26 +184,52 @@ async function saveFile(forceNew){
   const data=exportJSON();
   if(window.showSaveFilePicker){
     try{
-      if(!fileHandle||forceNew)fileHandle=await showSaveFilePicker({suggestedName:FILE_NAME,types:[{description:'Inventory data',accept:{'application/json':['.json']}}]});
+      if(!fileHandle||forceNew)fileHandle=await showSaveFilePicker({suggestedName:fileName(),types:[{description:'Inventory data',accept:{'application/json':['.json']}}]});
       const w=await fileHandle.createWritable();await w.write(data);await w.close();markSaved();return;
     }catch(e){if(e.name==='AbortError')return;fileHandle=null;}
   }
-  if(await shareOrDownload(data,FILE_NAME,'application/json'))markSaved();
+  if(await shareOrDownload(data,fileName(),'application/json'))markSaved();
 }
 async function openFile(){
   if(window.showOpenFilePicker){
-    try{const [h]=await showOpenFilePicker({types:[{description:'Inventory data',accept:{'application/json':['.json']}}]});const f=await h.getFile();if(await loadText(await f.text()))fileHandle=h;return;}
+    try{const hs=await showOpenFilePicker({multiple:true,types:[{description:'Inventory data',accept:{'application/json':['.json']}}]});const texts=[];for(const h of hs)texts.push(await (await h.getFile()).text());await mergeTexts(texts,hs.length===1?hs[0]:null);return;}
     catch(e){if(e.name==='AbortError')return;}
   }
   $('#open-input').value='';$('#open-input').click();
 }
-$('#open-input').addEventListener('change',async e=>{const f=e.target.files[0];if(f){fileHandle=null;await loadText(await f.text());}});
-async function loadText(txt){
-  let data;try{data=JSON.parse(txt);}catch(e){alert('That file isn’t inventory data.');return false;}
-  const arr=Array.isArray(data)?data:data&&data.items;
-  if(!Array.isArray(arr)){alert('That file isn’t inventory data.');return false;}
-  if(items.length&&dirty&&!confirm('You have unsaved changes. Replace them with this file?'))return false;
-  items=arr;dirty=false;lastSaved=data.saved||new Date().toISOString();await persist();render();return true;
+$('#open-input').addEventListener('change',async e=>{const fs=[...e.target.files];if(fs.length){const texts=[];for(const f of fs)texts.push(await f.text());await mergeTexts(texts,null);}});
+const stamp=it=>it.updated||it.created||'';
+function parseInv(txt){try{const d=JSON.parse(txt);const arr=Array.isArray(d)?d:d&&d.items;if(!Array.isArray(arr))return null;return {items:arr.filter(i=>i&&i.id),deleted:(d&&d.deleted)||{},saved:(d&&d.saved)||'',savedOn:(d&&d.savedOn)||''};}catch(e){return null;}}
+function mergeSets(sets){
+  const best=new Map(),del={};
+  sets.forEach(s=>{
+    Object.entries(s.deleted||{}).forEach(([id,t])=>{if(!del[id]||t>del[id])del[id]=t;});
+    s.items.forEach(it=>{const c=best.get(it.id);if(!c||stamp(it)>stamp(c))best.set(it.id,it);});
+  });
+  return {items:[...best.values()].filter(it=>!(del[it.id]&&del[it.id]>=stamp(it))),deleted:del};
+}
+const sig=s=>s.items.map(i=>i.id+'@'+stamp(i)).sort().join('|');
+async function mergeTexts(texts,handle){
+  const files=texts.map(parseInv).filter(Boolean),bad=texts.length-files.length;
+  if(!files.length){alert('Those files aren’t inventory data.');return;}
+  const before=new Map(items.map(i=>[i.id,stamp(i)]));
+  const m=mergeSets([{items,deleted},...files]);
+  let added=0,changed=0;
+  m.items.forEach(i=>{if(!before.has(i.id))added++;else if(before.get(i.id)!==stamp(i))changed++;});
+  const keep=new Set(m.items.map(i=>i.id));
+  const removed=[...before.keys()].filter(id=>!keep.has(id)).length;
+  items=m.items;deleted=m.deleted;
+  const newest=files.reduce((a,b)=>(b.saved>a.saved?b:a));
+  dirty=!files.some(f=>sig(f)===sig(m));
+  if(newest.saved){lastSaved=newest.saved;lastSavedOn=newest.savedOn||'';}
+  fileHandle=(handle&&!dirty)?handle:null;
+  await persist();render();
+  let msg=`Combined ${files.length} file${files.length>1?'s':''} → ${items.length} items.`;
+  const ch=[added&&`${added} new`,changed&&`${changed} updated`,removed&&`${removed} removed`].filter(Boolean);
+  msg+=ch.length?' '+ch.join(', ')+'.':' No changes.';
+  if(bad)msg+=`\n${bad} file${bad>1?'s were':' was'} skipped (not inventory data).`;
+  if(dirty)msg+='\n\nTap Save to write one up-to-date file. After that, you can delete the older copies.';
+  alert(msg);
 }
 
 /* ---------- exports ---------- */
@@ -408,7 +437,7 @@ $('#done-btn').onclick=()=>{
   if(!editing)items.push(it);
   closeSheet();markDirty();render();
 };
-$('#delete-btn').onclick=()=>{if(editing&&confirm('Delete “'+(editing.name||'this item')+'”?')){items=items.filter(i=>i!==editing);closeSheet();markDirty();render();}};
+$('#delete-btn').onclick=()=>{if(editing&&confirm('Delete “'+(editing.name||'this item')+'”?')){deleted[editing.id]=new Date().toISOString();items=items.filter(i=>i!==editing);closeSheet();markDirty();render();}};
 
 /* ---------- menu ---------- */
 $('#menu-btn').onclick=e=>{e.stopPropagation();$('#menu').hidden=!$('#menu').hidden;};
@@ -421,13 +450,13 @@ $('#menu').addEventListener('click',async e=>{
   if(a==='saveas')saveFile(true);
   if(a==='csv')exportCSV();
   if(a==='print')printReport();
-  if(a==='clear'&&confirm(dirty?'You have unsaved changes. Start a new, empty inventory anyway?':'Start a new, empty inventory? (Your saved file is not affected.)')){items=[];dirty=false;lastSaved=null;fileHandle=null;await persist();render();}
+  if(a==='clear'&&confirm(dirty?'You have unsaved changes. Start a new, empty inventory anyway?':'Start a new, empty inventory? (Your saved file is not affected.)')){items=[];deleted={};dirty=false;lastSaved=null;lastSavedOn='';fileHandle=null;await persist();render();}
 });
 $('#save-btn').onclick=()=>saveFile(false);
 window.addEventListener('beforeunload',e=>{if(dirty){e.preventDefault();e.returnValue='';}});
 
 /* ---------- start ---------- */
-(async()=>{const s=await idbGet('state');if(s){items=s.items||[];dirty=!!s.dirty;lastSaved=s.lastSaved||null;}render();})();
+(async()=>{const s=await idbGet('state');if(s){items=s.items||[];dirty=!!s.dirty;lastSaved=s.lastSaved||null;deleted=s.deleted||{};lastSavedOn=s.lastSavedOn||'';}render();})();
 </script>
 </body>
 </html>
