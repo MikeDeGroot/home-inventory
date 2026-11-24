@@ -138,6 +138,13 @@ main{padding:10px 16px;display:grid;gap:10px}
     </div>
     <label for="f-brand">Brand / model</label>
     <input id="f-brand">
+    <label for="f-purpose">Purpose</label>
+    <input id="f-purpose">
+    <div class="grid3">
+      <div><label for="f-acquired">Acquired</label><input id="f-acquired" type="date"></div>
+      <div><label for="f-disposed">Disposed</label><input id="f-disposed" type="date"></div>
+      <div><label for="f-reckoned">Reckoning</label><input id="f-reckoned" type="date"></div>
+    </div>
     <label for="f-notes">Notes</label>
     <textarea id="f-notes" rows="3"></textarea>
     <div style="margin-top:24px"><button id="delete-btn" class="danger" style="width:100%">Delete item</button></div>
@@ -239,19 +246,19 @@ async function mergeTexts(texts,handle,names=[]){
 /* ---------- exports ---------- */
 const csvCell=v=>{v=v==null?'':String(v);return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;};
 function exportCSV(){
-  const rows=[['Item','Room','Category','Brand/Model','Width (in)','Depth (in)','Height (in)','Weight (lb)','Value ($)','Notes','Photos','Added']];
-  filtered().forEach(it=>rows.push([it.name,it.room,it.category,it.brand,it.w,it.d,it.h,it.weight,it.value,it.notes,(it.photos||[]).length,(it.created||'').slice(0,10)]));
+  const rows=[['Item','Room','Category','Brand/Model','Width (in)','Depth (in)','Height (in)','Weight (lb)','Value ($)','Purpose','Acquired','Disposed','Date of reckoning','Notes','Photos','Added']];
+  filtered().forEach(it=>rows.push([it.name,it.room,it.category,it.brand,it.w,it.d,it.h,it.weight,it.value,it.purpose,it.acquired,it.disposed,it.reckoned,it.notes,(it.photos||[]).length,(it.created||'').slice(0,10)]));
   shareOrDownload(rows.map(r=>r.map(csvCell).join(',')).join('\n'),'home-inventory.csv','text/csv');
 }
 function printReport(){
   const list=filtered();
   const total=list.reduce((s,it)=>s+(+it.value||0),0);
-  let html=`<h2>Home Inventory</h2><div>${new Date().toLocaleDateString()} · ${list.length} items${total?` · total value $${total.toLocaleString()}`:''}${describeFilter()}</div><br><table><thead><tr><th>Photo</th><th>Item</th><th>Category</th><th>W × D × H (in)</th><th>Weight</th><th>Value</th><th>Notes</th></tr></thead><tbody>`;
+  let html=`<h2>Home Inventory</h2><div>${new Date().toLocaleDateString()} · ${list.length} items${total?` · total value $${total.toLocaleString()}`:''}${describeFilter()}</div><br><table><thead><tr><th>Photo</th><th>Item</th><th>Category</th><th>W × D × H (in)</th><th>Weight</th><th>Value</th><th>Dates</th><th>Notes</th></tr></thead><tbody>`;
   let room=null;
   list.forEach(it=>{
-    if((it.room||'')!==room){room=it.room||'';html+=`<tr><td colspan="7" class="room">${esc(room||'No room')}</td></tr>`;}
+    if((it.room||'')!==room){room=it.room||'';html+=`<tr><td colspan="8" class="room">${esc(room||'No room')}</td></tr>`;}
     const p=(it.photos||[])[0];
-    html+=`<tr><td>${p?`<img src="${p}">`:''}${(it.photos||[]).length>1?`<div>+${it.photos.length-1} more</div>`:''}</td><td><b>${esc(it.name||'')}</b>${it.brand?'<br>'+esc(it.brand):''}</td><td>${esc(it.category||'')}</td><td>${dims(it)}</td><td>${it.weight?fmt(it.weight)+' lb':''}</td><td>${it.value?'$'+(+it.value).toLocaleString():''}</td><td>${esc(it.notes||'')}</td></tr>`;
+    html+=`<tr><td>${p?`<img src="${p}">`:''}${(it.photos||[]).length>1?`<div>+${it.photos.length-1} more</div>`:''}</td><td><b>${esc(it.name||'')}</b>${it.brand?'<br>'+esc(it.brand):''}</td><td>${esc(it.category||'')}</td><td>${dims(it)}</td><td>${it.weight?fmt(it.weight)+' lb':''}</td><td>${it.value?'$'+(+it.value).toLocaleString():''}</td><td>${[it.acquired&&'Acquired '+it.acquired,it.disposed&&'Disposed '+it.disposed,it.reckoned&&'Reckoned '+it.reckoned].filter(Boolean).map(esc).join('<br>')}</td><td>${it.purpose?'<i>'+esc(it.purpose)+'</i>'+(it.notes?'<br>':''):''}${esc(it.notes||'')}</td></tr>`;
   });
   $('#report').innerHTML=html+'</tbody></table>';
   setTimeout(()=>window.print(),100);
@@ -268,7 +275,7 @@ function filtered(){
   return items.filter(it=>{
     if(room&&(it.room||'')!==room)return false;
     if(cat&&(it.category||'')!==cat)return false;
-    if(q){const hay=[it.name,it.room,it.category,it.brand,it.notes,it.dictation].join(' ').toLowerCase();if(!q.split(/\s+/).every(w=>hay.includes(w)))return false;}
+    if(q){const hay=[it.name,it.room,it.category,it.brand,it.purpose,it.notes,it.dictation].join(' ').toLowerCase();if(!q.split(/\s+/).every(w=>hay.includes(w)))return false;}
     if(fw||fd||fh){
       const w=+it.w||0,d=+it.d||0,h=+it.h||0;
       if(!w&&!d&&!h)return false;
@@ -295,7 +302,7 @@ function render(){
   $('#summary').textContent=items.length?`${list.length} of ${items.length} items${total?` · $${total.toLocaleString()} value`:''}`:'';
   $('#list').innerHTML=list.length?list.map(it=>{
     const p=(it.photos||[])[0];
-    const meta=[it.room,it.category].filter(Boolean).join(' · ');
+    const meta=[it.room,it.category,it.disposed&&'Disposed '+it.disposed].filter(Boolean).join(' · ');
     const d=dims(it);
     return `<div class="card" data-id="${it.id}">${p?`<img class="thumb" src="${p}" alt="">`:'<div class="thumb">No photo</div>'}<div><h3>${esc(it.name||'Untitled')}</h3>${d?`<div class="dims">${d} in</div>`:''}<div class="meta">${esc(meta)}${it.value?` · $${(+it.value).toLocaleString()}`:''}</div></div></div>`;
   }).join(''):`<div class="empty">${items.length?'No items match.':'Tap “+ Add item” to photograph and describe your first item.'}</div>`;
@@ -349,7 +356,7 @@ function parseDictation(raw){
   // tidy connectors left between removed measurements ("; by ;")
   for(let i=0;i<3;i++)t=t.replace(/;\s*(?:by|x|×|and|,)\s*(?=;)/gi,'; ');
   // labelled text fields
-  const LBL=/\b(name|item|location|category|brand|room|model|type)\b(\s*(?:is|:|-)\s*|\s+)/gi;
+  const LBL=/\b(name|item|location|category|brand|room|model|type|purpose)\b(\s*(?:is|:|-)\s*|\s+)/gi;
   const marks=[];let m;
   while((m=LBL.exec(t))){
     const w=m[1].toLowerCase();
@@ -359,7 +366,7 @@ function parseDictation(raw){
     }
     marks.push({w,start:m.index,end:m.index+m[0].length});
   }
-  const map={name:'name',item:'name',location:'room',room:'room',category:'category',type:'category',brand:'brand',model:'model'};
+  const map={name:'name',item:'name',location:'room',room:'room',category:'category',type:'category',brand:'brand',model:'model',purpose:'purpose'};
   marks.forEach((mk,i)=>{const seg=clean(t.slice(mk.end,marks[i+1]?marks[i+1].start:t.length));if(seg&&/[a-z]/i.test(seg))out[map[mk.w]]=seg;});
   const pre=clean(t.slice(0,marks.length?marks[0].start:t.length));
   if(!out.name&&pre&&/[a-z]/i.test(pre)&&pre.length<80)out.name=pre;
@@ -368,7 +375,7 @@ function parseDictation(raw){
   return out;
 }
 
-const FIELDS={name:'#f-name',room:'#f-room2',category:'#f-category',brand:'#f-brand',w:'#f-w',d:'#f-d',h:'#f-h',weight:'#f-weight',value:'#f-value',notes:'#f-notes'};
+const FIELDS={name:'#f-name',room:'#f-room2',category:'#f-category',brand:'#f-brand',purpose:'#f-purpose',acquired:'#f-acquired',disposed:'#f-disposed',reckoned:'#f-reckoned',w:'#f-w',d:'#f-d',h:'#f-h',weight:'#f-weight',value:'#f-value',notes:'#f-notes'};
 let parseTimer;
 function applyDictation(){
   const p=parseDictation($('#f-dictation').value);
