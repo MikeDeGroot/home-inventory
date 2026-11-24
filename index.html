@@ -17,6 +17,7 @@ header{position:sticky;top:0;z-index:5;background:var(--bg);padding:calc(env(saf
 h1{font-size:20px;margin:0;flex:1}
 .status{font-size:12px;color:var(--muted);margin-top:2px;white-space:pre-line}
 .status.dirty{color:var(--warn)}
+.status.busy{color:var(--accent);font-weight:600}
 button{font:inherit;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:10px;padding:8px 12px;cursor:pointer}
 button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600}
 button.danger{color:var(--danger)}
@@ -209,13 +210,20 @@ async function saveFile(forceNew){
 }
 async function openFile(){
   if(window.showOpenFilePicker){
-    try{const hs=await showOpenFilePicker({multiple:true,...(lastPicked?{startIn:lastPicked}:{}),types:[{description:'Inventory data',accept:{'application/json':['.json']}}]});lastPicked=hs[0];idbSet('lastPicked',lastPicked);const texts=[];for(const h of hs)texts.push(await (await h.getFile()).text());await mergeTexts(texts,hs.length===1?hs[0]:null,hs.map(h=>h.name));return;}
+    try{const hs=await showOpenFilePicker({multiple:true,...(lastPicked?{startIn:lastPicked}:{}),types:[{description:'Inventory data',accept:{'application/json':['.json']}}]});lastPicked=hs[0];idbSet('lastPicked',lastPicked);const fl=[];for(const h of hs)fl.push(await h.getFile());const texts=await readFiles(fl);await mergeTexts(texts,hs.length===1?hs[0]:null,hs.map(h=>h.name));return;}
     catch(e){if(e.name==='AbortError')return;}
   }
   $('#open-input').value='';$('#open-input').click();
 }
-$('#open-input').addEventListener('change',async e=>{const fs=[...e.target.files];if(fs.length){const texts=[];for(const f of fs)texts.push(await f.text());await mergeTexts(texts,null,fs.map(f=>f.name));}});
+$('#open-input').addEventListener('change',async e=>{const fs=[...e.target.files];if(fs.length){const texts=await readFiles(fs);await mergeTexts(texts,null,fs.map(f=>f.name));}});
 const stamp=it=>it.updated||it.created||'';
+async function progress(msg){const s=$('#status');s.textContent=msg;s.className='status busy';$('#save-btn').hidden=true;await new Promise(r=>requestAnimationFrame(()=>setTimeout(r,0)));}
+async function readFiles(fl){
+  const mb=b=>(b/1048576).toFixed(1),total=fl.reduce((s,f)=>s+f.size,0);let done=0;const texts=[];
+  try{for(let i=0;i<fl.length;i++){await progress(`Reading file ${i+1} of ${fl.length} · ${mb(done)} of ${mb(total)} MB\n${fl[i].name}`);texts.push(await fl[i].text());done+=fl[i].size;}}
+  catch(e){updateStatus();throw e;}
+  return texts;
+}
 function parseInv(txt){try{const d=JSON.parse(txt);const arr=Array.isArray(d)?d:d&&d.items;if(!Array.isArray(arr))return null;return {items:arr.filter(i=>i&&i.id),deleted:(d&&d.deleted)||{},saved:(d&&d.saved)||'',savedOn:(d&&d.savedOn)||''};}catch(e){return null;}}
 function mergeSets(sets){
   const best=new Map(),del={};
@@ -227,8 +235,11 @@ function mergeSets(sets){
 }
 const sig=s=>s.items.map(i=>i.id+'@'+stamp(i)).sort().join('|');
 async function mergeTexts(texts,handle,names=[]){
-  const files=texts.map((t,i)=>{const f=parseInv(t);if(f)f.name=names[i]||'';return f;}).filter(Boolean),bad=texts.length-files.length;
-  if(!files.length){alert('Those files aren’t inventory data.');return;}
+  const files=[];
+  for(let i=0;i<texts.length;i++){await progress(`Checking file ${i+1} of ${texts.length}…${names[i]?'\n'+names[i]:''}`);const f=parseInv(texts[i]);if(f){f.name=names[i]||'';files.push(f);}}
+  const bad=texts.length-files.length;
+  if(files.length)await progress(`Combining ${files.length} file${files.length>1?'s':''}…`);
+  if(!files.length){updateStatus();alert('Those files aren’t inventory data.');return;}
   const before=new Map(items.map(i=>[i.id,stamp(i)]));
   const m=mergeSets([{items,deleted},...files]);
   let added=0,changed=0;
