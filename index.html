@@ -98,6 +98,7 @@ main{padding:10px 16px;display:grid;gap:10px}
   <button data-act="saveas">Save as new file…</button>
   <button data-act="csv">Export spreadsheet (CSV)</button>
   <button data-act="print">Print / PDF report</button>
+  <button data-act="ics">Add decision reminders to Calendar</button>
   <button data-act="clear" class="danger">Start a new inventory</button>
 </div>
 <div id="summary" class="summary"></div>
@@ -151,6 +152,7 @@ main{padding:10px 16px;display:grid;gap:10px}
       <div><label for="f-reckoned">Reckoning</label><input id="f-reckoned" type="date"></div>
     </div>
     <div class="parsed" style="color:var(--muted)">Reckoning = date to decide keep or dispose · Blank Acquired = owned since the beginning · Blank Disposed = still owned</div>
+    <button id="cal-btn" style="margin-top:8px;width:100%">📅 Add reckoning reminder to Calendar</button>
     <label for="f-notes">Notes</label>
     <textarea id="f-notes" rows="3"></textarea>
     <div style="margin-top:24px"><button id="delete-btn" class="danger" style="width:100%">Delete item</button></div>
@@ -269,6 +271,29 @@ function printReport(){
   $('#report').innerHTML=html+'</tbody></table>';
   setTimeout(()=>window.print(),100);
 }
+function icsText(s){return String(s||'').replace(/\\/g,'\\\\').replace(/;/g,'\\;').replace(/,/g,'\\,').replace(/\r?\n/g,'\\n');}
+function icsFold(line){let out='';while(line.length>74){out+=line.slice(0,74)+'\r\n ';line=line.slice(74);}return out+line;}
+function exportICS(list){
+  const ymd=s=>s.replace(/-/g,''),next=s=>{const [y,m,d]=s.split('-').map(Number),t=new Date(y,m-1,d+1),p=n=>String(n).padStart(2,'0');return `${t.getFullYear()}${p(t.getMonth()+1)}${p(t.getDate())}`;};
+  const now=new Date().toISOString().replace(/[-:]/g,'').replace(/\.\d+/,'');
+  const L=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Home Inventory//EN','CALSCALE:GREGORIAN','METHOD:PUBLISH'];
+  list.forEach(it=>{
+    const desc=[it.room&&'Room: '+it.room,it.category&&'Category: '+it.category,it.purpose&&'Purpose: '+it.purpose,dims(it)&&'Size: '+dims(it)+' in',it.value&&'Value: $'+(+it.value).toLocaleString(),it.acquired&&'Acquired: '+it.acquired,it.notes&&'Notes: '+it.notes].filter(Boolean).join('\n');
+    L.push('BEGIN:VEVENT','UID:'+(it.id||Date.now())+'-reckoning@home-inventory','DTSTAMP:'+now,'DTSTART;VALUE=DATE:'+ymd(it.reckoned),'DTEND;VALUE=DATE:'+next(it.reckoned),
+      icsFold('SUMMARY:'+icsText('Keep or dispose? '+(it.name||'Item'))),icsFold('DESCRIPTION:'+icsText(desc)),'TRANSP:TRANSPARENT',
+      'BEGIN:VALARM','ACTION:DISPLAY',icsFold('DESCRIPTION:'+icsText('Keep or dispose? '+(it.name||'Item'))),'TRIGGER:PT9H','END:VALARM','END:VEVENT');
+  });
+  L.push('END:VCALENDAR');
+  const ics=L.join('\r\n'),u=navigator.userAgent,mobile=/iPhone|iPad|Android/.test(u)||(/Macintosh/.test(u)&&navigator.maxTouchPoints>1);
+  if(mobile)location.href='data:text/calendar;charset=utf-8,'+encodeURIComponent(ics);
+  else download(new Blob([ics],{type:'text/calendar'}),list.length===1?`reminder ${(list[0].name||'item').replace(/[^\w -]/g,'')}.ics`:'home-inventory reminders.ics');
+}
+$('#cal-btn').onclick=()=>{
+  const r=$('#f-reckoned').value;if(!r){alert('Set a Reckoning date first.');return;}
+  const it={id:editing?.id||'new'+Date.now().toString(36),reckoned:r};
+  Object.entries(FIELDS).forEach(([k,s])=>{if(k!=='reckoned')it[k]=$(s).value.trim();});
+  exportICS([it]);
+};
 function todayISO(){const d=new Date(),p=n=>String(n).padStart(2,'0');return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`;}
 function asOfLabel(){const w=$('#f-when').value;return w==='all'?'':w==='due'?' · decision due':w==='upcoming'?' · upcoming decisions':(w==='on'&&$('#f-asof').value)?' · owned on '+$('#f-asof').value:' · owned now';}
 function describeFilter(){const p=[];const ow=asOfLabel().replace(' · ','');if(ow)p.push(ow);if($('#f-room').value)p.push($('#f-room').value);if($('#f-cat').value)p.push($('#f-cat').value);if($('#q').value.trim())p.push('“'+$('#q').value.trim()+'”');return p.length?' · filtered: '+esc(p.join(', ')):'';}
@@ -476,6 +501,7 @@ $('#menu').addEventListener('click',async e=>{
   if(a==='saveas')saveFile(true);
   if(a==='csv')exportCSV();
   if(a==='print')printReport();
+  if(a==='ics'){const td=todayISO();const list=items.filter(it=>it.reckoned&&it.reckoned>=td&&!(it.disposed&&it.disposed<=td));if(!list.length)alert('No upcoming reckoning dates to add.');else if(confirm(`Add ${list.length} reminder${list.length>1?'s':''} to your calendar?`))exportICS(list);}
   if(a==='clear'&&confirm(dirty?'You have unsaved changes. Start a new, empty inventory anyway?':'Start a new, empty inventory? (Your saved file is not affected.)')){items=[];deleted={};dirty=false;lastSaved=null;lastSavedOn='';loadedFrom='';fileHandle=null;await persist();render();}
 });
 $('#save-btn').onclick=()=>saveFile(false);
