@@ -60,8 +60,9 @@ main{padding:10px 16px;display:grid;gap:10px}
 #viewer .vbar{position:absolute;left:0;right:0;bottom:calc(env(safe-area-inset-bottom) + 16px);display:flex;gap:10px;justify-content:center}
 #viewer .vbar button{min-width:120px}
 #report{display:none}
+footer{text-align:center;font-size:12px;color:var(--muted);padding:16px 16px 0}
 @media print{
-  header,main,.fab,.sheet,.menu,.summary,#viewer{display:none!important}
+  header,main,footer,.fab,.sheet,.menu,.summary,#viewer{display:none!important}
   body{background:#fff;color:#000;padding:0}
   #report{display:block;font-size:11px}
   #report h2{margin:0 0 4px}
@@ -104,6 +105,7 @@ main{padding:10px 16px;display:grid;gap:10px}
 </div>
 <div id="summary" class="summary"></div>
 <main id="list"></main>
+<footer>© <span id="cr-year">2026</span> Mike DeGroot. All rights reserved.</footer>
 <button class="fab primary" id="add-btn">+ Add item</button>
 <input type="file" id="open-input" multiple hidden>
 
@@ -272,7 +274,7 @@ function exportCSV(){
 function printReport(){
   const list=filtered();
   const total=list.reduce((s,it)=>s+(+it.value||0),0);
-  let html=`<h2>Home Inventory</h2><div>${new Date().toLocaleDateString()} · ${list.length} items${total?` · total value $${total.toLocaleString()}`:''}${describeFilter()}</div><br><table><thead><tr><th>Photo</th><th>Item</th><th>Category</th><th>W × D × H (in)</th><th>Weight</th><th>Value</th><th>Dates</th><th>Notes</th></tr></thead><tbody>`;
+  let html=`<h2>Home Inventory</h2><div>${new Date().toLocaleDateString()} · ${list.length} items${total?` · total value $${total.toLocaleString()}`:''}${describeFilter()}</div><div style="color:#666">© ${new Date().getFullYear()} Mike DeGroot. All rights reserved.</div><br><table><thead><tr><th>Photo</th><th>Item</th><th>Category</th><th>W × D × H (in)</th><th>Weight</th><th>Value</th><th>Dates</th><th>Notes</th></tr></thead><tbody>`;
   let room=null;
   list.forEach(it=>{
     if((it.room||'')!==room){room=it.room||'';html+=`<tr><td colspan="8" class="room">${esc(room||'No room')}</td></tr>`;}
@@ -519,6 +521,7 @@ $('#save-btn').onclick=()=>saveFile(false);
 window.addEventListener('beforeunload',e=>{if(dirty){e.preventDefault();e.returnValue='';}});
 
 /* ---------- start ---------- */
+$('#cr-year').textContent=new Date().getFullYear();
 (async()=>{lastPicked=await idbGet('lastPicked')||null;const s=await idbGet('state');if(s){items=s.items||[];dirty=!!s.dirty;lastSaved=s.lastSaved||null;deleted=s.deleted||{};lastSavedOn=s.lastSavedOn||'';loadedFrom=s.loadedFrom||'';}render();})();
 </script>
 </body>
